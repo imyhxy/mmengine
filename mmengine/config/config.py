@@ -1324,7 +1324,10 @@ class Config:
                 k = int(k)
                 if len(b) <= k:
                     raise KeyError(f'Index {k} exceeds the length of list {b}')
-                b[k] = Config._merge_a_into_b(v, b[k], allow_list_keys)
+                if isinstance(v, dict):
+                  b[k] = Config._merge_a_into_b(v, b[k], allow_list_keys)
+                else:
+                  b[k] = v
             elif isinstance(v, dict):
                 if k in b and not v.pop(DELETE_KEY, False):
                     allowed_types: Union[Tuple, type] = (
