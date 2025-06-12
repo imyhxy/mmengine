@@ -1318,7 +1318,7 @@ class Config:
             ...     {'0': dict(a=2)}, [dict(a=1), dict(b=2)], True)
             [{'a': 2}, {'b': 2}]
         """
-        b = b.copy()
+        b = copy.copy(b)
         for k, v in a.items():
             if allow_list_keys and k.isdigit() and isinstance(b, list):
                 k = int(k)
