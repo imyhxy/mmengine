@@ -1,6 +1,7 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 import copy
 import inspect
+import warnings
 from typing import List, Union
 
 import torch
@@ -115,7 +116,7 @@ def register_sophia_optimizers() -> List[str]:
     Returns:
         List[str]: A list of registered optimizers' name.
     """
-    optimizers = []
+    optimizers = []  # type: ignore
     try:
         import Sophia
     except ImportError:
@@ -125,8 +126,10 @@ def register_sophia_optimizers() -> List[str]:
             _optim = getattr(Sophia, module_name)
             if inspect.isclass(_optim) and issubclass(_optim,
                                                       torch.optim.Optimizer):
-                OPTIMIZERS.register_module(module=_optim)
-                optimizers.append(module_name)
+                try:
+                    OPTIMIZERS.register_module(module=_optim)
+                except Exception as e:
+                    warnings.warn(f'Failed to import {Sophia} for {e}')
     return optimizers
 
 
@@ -146,7 +149,8 @@ def register_bitsandbytes_optimizers() -> List[str]:
     dadaptation_optimizers = []
     try:
         import bitsandbytes as bnb
-    except ImportError:
+    # import bnb may trigger cuda related error without nvidia gpu resources
+    except (ImportError, RuntimeError):
         pass
     else:
         optim_classes = inspect.getmembers(
@@ -155,7 +159,10 @@ def register_bitsandbytes_optimizers() -> List[str]:
         for name, optim_cls in optim_classes:
             if name in OPTIMIZERS:
                 name = f'bnb_{name}'
-            OPTIMIZERS.register_module(module=optim_cls, name=name)
+            try:
+                OPTIMIZERS.register_module(module=optim_cls, name=name)
+            except Exception as e:
+                warnings.warn(f'Failed to import {optim_cls.__name__} for {e}')
             dadaptation_optimizers.append(name)
     return dadaptation_optimizers
 
@@ -170,7 +177,10 @@ def register_transformers_optimizers():
     except ImportError:
         pass
     else:
-        OPTIMIZERS.register_module(name='Adafactor', module=Adafactor)
+        try:
+            OPTIMIZERS.register_module(name='Adafactor', module=Adafactor)
+        except Exception as e:
+            warnings.warn(f'Failed to import Adafactor for {e}')
         transformer_optimizers.append('Adafactor')
     return transformer_optimizers
 

@@ -1,8 +1,8 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 import os.path as osp
 import sys
+from importlib.metadata import PackageNotFoundError
 
-import pkg_resources
 import pytest
 
 from mmengine.utils import get_installed_path, is_installed
@@ -20,6 +20,12 @@ def test_is_installed():
     assert is_installed('optim')
     sys.path.pop()
 
+    assert is_installed('nonexistentpackage12345') is False
+    assert is_installed('os') is True  # 'os' is a module name
+    assert is_installed('setuptools') is True
+    # Should work on both distribution and module name
+    assert is_installed('pillow') is True and is_installed('PIL') is True
+
 
 def test_get_install_path():
     # TODO: Windows CI may failed in unknown reason. Skip check the value
@@ -33,5 +39,5 @@ def test_get_install_path():
     assert get_installed_path('optim') == osp.join(PYTHONPATH, 'optim')
     sys.path.pop()
 
-    with pytest.raises(pkg_resources.DistributionNotFound):
+    with pytest.raises(PackageNotFoundError):
         get_installed_path('unknown')
