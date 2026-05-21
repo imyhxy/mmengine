@@ -1,5 +1,6 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 from contextlib import contextmanager
+from inspect import signature
 from typing import Union
 
 import torch
@@ -12,12 +13,27 @@ from mmengine.utils import digit_version
 from mmengine.utils.dl_utils import TORCH_VERSION
 from .optimizer_wrapper import OptimWrapper
 
-if is_npu_available():
-    from torch.npu.amp import GradScaler
-elif is_mlu_available():
-    from torch.mlu.amp import GradScaler
-else:
+
+def _get_grad_scaler():
+    """Get the GradScaler class and default keyword arguments."""
+    if is_npu_available():
+        from torch.npu.amp import GradScaler
+        return GradScaler, {}
+    elif is_mlu_available():
+        from torch.mlu.amp import GradScaler
+        return GradScaler, {}
+    elif hasattr(torch, 'amp') and hasattr(torch.amp, 'GradScaler'):
+        grad_scaler = torch.amp.GradScaler
+        scaler_params = signature(grad_scaler).parameters
+        if 'device' in scaler_params:
+            return grad_scaler, {'device': 'cuda'}
+        elif 'device_type' in scaler_params:
+            return grad_scaler, {'device_type': 'cuda'}
     from torch.cuda.amp import GradScaler
+    return GradScaler, {}
+
+
+GradScaler, _grad_scaler_kwargs = _get_grad_scaler()
 
 
 @OPTIM_WRAPPERS.register_module()
@@ -34,8 +50,8 @@ class AmpOptimWrapper(OptimWrapper):
 
     Args:
         loss_scale (float or str or dict): The initial configuration of
-            `torch.cuda.amp.GradScaler`. See more specific arguments
-            introduction at `PyTorch AMP <https://pytorch.org/docs/stable/amp.html?highlight=gradscalertorch.cuda.amp.GradScaler>`_ # noqa: E501
+            ``GradScaler``. See more specific arguments
+            introduction at `PyTorch AMP <https://pytorch.org/docs/stable/amp.html#torch.amp.GradScaler>`_ # noqa: E501
             Defaults to ``dynamic``.
 
             - "dynamic": Initialize GradScale without any arguments.
@@ -85,23 +101,27 @@ class AmpOptimWrapper(OptimWrapper):
                 from torch.distributed.fsdp.sharded_grad_scaler import \
                     ShardedGradScaler
                 scaler_type = ShardedGradScaler
+                scaler_kwargs = {}
             else:
                 raise RuntimeError(
                     'PyTorch>=2.0.0 is required when sets `use_fsdp=True`')
         else:
             scaler_type = GradScaler
+            scaler_kwargs = dict(_grad_scaler_kwargs)
 
         if loss_scale == 'dynamic':
             #  If loss_scale is a string, it must be 'dynamic', then dynamic
             #  loss scaling will be used.
-            self.loss_scaler = scaler_type()
+            self.loss_scaler = scaler_type(**scaler_kwargs)
         elif isinstance(loss_scale, float):
             # Static loss scaling
             self._scale_update_param = loss_scale
-            self.loss_scaler = scaler_type(init_scale=loss_scale)
+            scaler_kwargs.update(init_scale=loss_scale)
+            self.loss_scaler = scaler_type(**scaler_kwargs)
         elif isinstance(loss_scale, dict):
             # More specific configuration.
-            self.loss_scaler = scaler_type(**loss_scale)
+            scaler_kwargs.update(loss_scale)
+            self.loss_scaler = scaler_type(**scaler_kwargs)
         else:
             raise TypeError('loss_scale must be of type float, dict, or '
                             f'"dynamic", but got {loss_scale}')
