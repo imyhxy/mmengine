@@ -11,7 +11,7 @@ from mmengine.evaluator import Evaluator
 from mmengine.logging import HistoryBuffer, print_log
 from mmengine.registry import LOOPS
 from mmengine.structures import BaseDataElement
-from mmengine.utils import is_list_of
+from mmengine.utils import is_list_of, track_iter_progress
 from .amp import autocast
 from .base_loop import BaseLoop
 from .utils import calc_dynamic_intervals
@@ -280,7 +280,7 @@ class IterBasedTrainLoop(BaseLoop):
                 'that has already been trained',
                 logger='current',
                 level=logging.WARNING)
-            for _ in range(self._iter):
+            for _ in track_iter_progress(range(self._iter)):
                 next(self.dataloader_iterator)
         while self._iter < self._max_iters and not self.stop_training:
             self.runner.model.train()
